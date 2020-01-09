@@ -1,14 +1,16 @@
+#!/usr/bin/env python3
 import argparse
 def get_parser():
     parser = argparse.ArgumentParser(description="Detectron2 demo for builtin models",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "--config-file",
-        default="/detectron2_repo/configs/COCO-Detection/faster_rcnn_R_101_FPN_3x.yaml",
+        default="/home/appuser/detectron2_repo/configs/COCO-Detection/faster_rcnn_R_101_FPN_3x.yaml",
         metavar="FILE",
         help="path to config file",
     )
     parser.add_argument("--video-input", help="Path to video file.")
+    parser.add_argument("--videos-input-dir", help="A directory of input videos.")
     parser.add_argument("--images-input-dir", type=str, help="A directory of input images with extension *.jpg. The file names should be the frame number (e.g. 00000000001.jpg)")
     parser.add_argument("--model-weights", type=str, default="detectron2://COCO-Detection/faster_rcnn_R_101_FPN_3x/137851257/model_final_f6e8b1.pkl", help="Detectron2 object detection model.")
     parser.add_argument(
@@ -34,11 +36,8 @@ def get_parser():
 parser = get_parser()
 args = parser.parse_args()
 
-if args.video_input and args.images_input_dir:
-    parser.error("--video-input and --images-input-dir can't come together.")
-
-if not args.video_input and not args.images_input_dir:
-    parser.error("Either --video-input or --images-input-dir has to be specified.")
+if bool(args.video_input) + bool(args.images_input_dir) + bool(args.videos_input_dir) != 1:
+    parser.error("--video-input, --video-input-dir and --images-input-dir can't come together and only one must be specified.")
 
 # Some basic setup
 # Setup detectron2 logger
@@ -183,3 +182,46 @@ if __name__ == '__main__':
             output_file.release()
         else:
             cv2.destroyAllWindows()
+
+    elif args.videos_input_dir:
+        demo = VisualizationDemo(cfg)
+        mp4s = sorted(glob.glob(os.path.join(args.videos_input_dir, "*.mp4")))
+        for mp4 in tqdm.tqdm(mp4s):
+            all_detection_outputs = {}
+
+            video = cv2.VideoCapture(mp4)
+            width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            frames_per_second = video.get(cv2.CAP_PROP_FPS)
+            num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+            basename = os.path.basename(mp4)
+
+            os.makedirs(args.output, exist_ok=True)
+            output_fname = os.path.join(args.output, basename)
+            predictions_save_path = os.path.splitext(output_fname)[0] + ".pkl"
+            assert not os.path.isfile(output_fname), output_fname
+            output_file = cv2.VideoWriter(
+                filename=output_fname,
+                # some installation of opencv may not support x264 (due to its license),
+                # you can try other format (e.g. MPEG)
+                #fourcc=cv2.VideoWriter_fourcc(*"x264"),
+                fourcc=cv2.VideoWriter_fourcc(*"avc1"),
+                fps=float(frames_per_second),
+                frameSize=(width, height),
+                isColor=True,
+            )
+            for frame_num, (predictions, vis_frame) in enumerate(demo.run_on_video(video), 1):
+                #print(predictions.pred_classes)
+                #print(predictions.pred_boxes)
+                #print(predictions.scores)
+                # predictions visualisation
+                output_file.write(vis_frame)
+
+                # predictions pickle
+                output_dict = {'num_detections': len(predictions), 'detection_boxes': predictions.pred_boxes.tensor.numpy(), 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy()}
+                all_detection_outputs[frame_num] = output_dict
+            video.release()
+            output_file.release()
+
+            with open(predictions_save_path, 'wb') as handle:
+                pickle.dump(all_detection_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
