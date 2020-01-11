@@ -65,8 +65,23 @@ from detectron2.data import MetadataCatalog
 from predictor import VisualizationDemo
 from detectron2.utils.video_visualizer import VideoVisualizer
 
+
+# Test
+
+
+
+
+import sys
+
+
+
+from feature_predictor import FeaturePredictor
+import custom_roi_head
+import custom_rcnn
+
+
 def setup_cfg(args):
-    # load config from file and command-line arguments
+    # load config from file and command-line arguments{{{
     cfg = get_cfg()
     # default weights
     cfg.merge_from_file(args.config_file)
@@ -76,8 +91,8 @@ def setup_cfg(args):
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = args.confidence_threshold
     cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = args.confidence_threshold
     cfg.MODEL.WEIGHTS = args.model_weights
-    cfg.freeze()
-    return cfg
+#    cfg.freeze()
+    return cfg#}}}
 
 if __name__ == '__main__':
     #mp.set_start_method("spawn", force=True)
@@ -184,6 +199,23 @@ if __name__ == '__main__':
             cv2.destroyAllWindows()
 
     elif args.videos_input_dir:
+        # Test
+
+        # Use customised model so that we also get NMS kept indices
+        cfg.MODEL.ROI_HEADS.NAME = "StandardROIHeadsCustom"
+        cfg.MODEL.META_ARCHITECTURE = "GeneralizedRCNNCustom"
+
+        predictor = TestPredictor(cfg)
+        im = cv2.imread('input.jpg')
+        predictions, kept_indices, roipool_feature = predictor(im)
+        print(predictions[0])
+        print(kept_indices[0].shape)
+        print(roipool_feature[kept_indices[0]].shape)
+        
+        sys.exit()
+
+
+
         demo = VisualizationDemo(cfg)
         mp4s = sorted(glob.glob(os.path.join(args.videos_input_dir, "*.mp4")))
         for mp4 in tqdm.tqdm(mp4s):
