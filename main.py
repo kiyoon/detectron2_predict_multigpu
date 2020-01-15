@@ -250,6 +250,19 @@ if __name__ == '__main__':
                 # XYXY to YXYX
                 detection_boxes[:, [0,1]] = detection_boxes[:, [1,0]]
                 detection_boxes[:, [2,3]] = detection_boxes[:, [3,2]]
+
+                # Visualise feature
+                if args.visualise_feature:
+                    vis_dir = os.path.splitext(output_fname)[0]
+                    os.makedirs(vis_dir, exist_ok=True)
+                    for i, (detection_box, roi_feature) in enumerate(zip(detection_boxes, roi_pool_feature)):
+                        detection_crop = frame[detection_box[0]:detection_box[2], detection_box[1]:detection_box[3]]
+                        cv2.imwrite(os.path.join(vis_dir, 'obj%02d.jpg' % i), detection_crop)
+
+                        for f, channel in enumerate(roi_feature):
+                            cv2.imwrite(os.path.join(vis_dir, 'obj%02d-channel%03d.jpg' % (i,f)), channel)
+
+
                 # YXYX to YXHW
                 detection_boxes[:, 2] -= detection_boxes[:, 0]
                 detection_boxes[:, 3] -= detection_boxes[:, 1]
