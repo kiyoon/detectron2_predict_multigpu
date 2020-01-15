@@ -20,6 +20,8 @@ def get_parser():
     )
     parser.add_argument("--visualise-bbox", action='store_true', help="Save bounding box visualisation.")
     parser.add_argument("--visualise-feature", action='store_true', help="Save ROI pooled feature visualisation (but only the first frame of a video).")
+    parser.add_argument("--divide-job-count", type=int, default=1, help="If there are too many files to process, you may want to divide the job into many processes. This is the number of processes you want to split but the programme doesn't run multiprocess for you. It merely splits the file lists into the number and uses --divide-job-index to assign files to process. Only effective when --videos-input-dir is set.")
+    parser.add_argument("--divide-job-index", type=int, default=0, help="If there are too many files to process, you may want to divide the job into many processes. This is the index of process.")
 
     parser.add_argument(
         "--confidence-threshold",
@@ -209,6 +211,16 @@ if __name__ == '__main__':
         demo = VisualizationDemo(cfg, visualise = args.visualise_bbox)
 
         mp4s = sorted(glob.glob(os.path.join(args.videos_input_dir, "*.mp4")))
+        num_files = len(mp4s)
+        num_files_per_process = round(num_files / args.divide_job_count)
+
+        if args.divide_job_index == args.divide_job_count -1:       # last process
+            mp4s = mp4s[args.divide_job_index * num_files_per_process:]     # to the end
+        else:
+            mp4s = mp4s[args.divide_job_index * num_files_per_process:(args.divide_job_index+1) * num_files_per_process]
+
+        print("Process from %s to %s" % (mp4s[0], mp4s[-1]))
+
         for mp4 in tqdm.tqdm(mp4s):
             all_detection_outputs = {}
 
