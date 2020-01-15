@@ -119,6 +119,8 @@ class VisualizationDemo(object):
                 vis_frame = cv2.cvtColor(vis_frame.get_image(), cv2.COLOR_RGB2BGR)
             else:
                 vis_frame = None
+                if "instances" in predictions:
+                    predictions = predictions["instances"].to(self.cpu_device)
 
             return predictions, roi_pool_feature, vis_frame, frame
 

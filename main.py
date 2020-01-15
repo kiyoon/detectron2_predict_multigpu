@@ -19,7 +19,7 @@ def get_parser():
         "If not given, will show output in an OpenCV window.",
     )
     parser.add_argument("--visualise-bbox", action='store_true', help="Save bounding box visualisation.")
-    parser.add_argument("--visualise-feature", action='store_true', help="Save ROI pooled feature visualisation.")
+    parser.add_argument("--visualise-feature", action='store_true', help="Save ROI pooled feature visualisation (but only the first frame of a video).")
 
     parser.add_argument(
         "--confidence-threshold",
@@ -64,7 +64,7 @@ from detectron2.config import get_cfg
 from detectron2.utils.visualizer import Visualizer
 from detectron2.data import MetadataCatalog
 
-from predictor import VisualizationDemo, PredictionDemo
+from predictor import VisualizationDemo
 from detectron2.utils.video_visualizer import VideoVisualizer
 
 
@@ -252,15 +252,21 @@ if __name__ == '__main__':
                 detection_boxes[:, [2,3]] = detection_boxes[:, [3,2]]
 
                 # Visualise feature
-                if args.visualise_feature:
+                if args.visualise_feature and frame_num == 1:
                     vis_dir = os.path.splitext(output_fname)[0]
                     os.makedirs(vis_dir, exist_ok=True)
-                    for i, (detection_box, roi_feature) in enumerate(zip(detection_boxes, roi_pool_feature)):
-                        detection_crop = frame[detection_box[0]:detection_box[2], detection_box[1]:detection_box[3]]
-                        cv2.imwrite(os.path.join(vis_dir, 'obj%02d.jpg' % i), detection_crop)
+                    cv2.imwrite(os.path.join(vis_dir, 'frame%04d.jpg' % (frame_num)), frame)
+                    for i, (detection_box, roi_feature) in enumerate(zip(detection_boxes, roi_pool_feature.numpy())):
+                        detection_crop = frame[int(round(detection_box[0])):int(round(detection_box[2])), int(round(detection_box[1])):int(round(detection_box[3]))]
+                        detection_crop = cv2.resize(detection_crop, (256,256), interpolation=cv2.INTER_CUBIC)
+                        cv2.imwrite(os.path.join(vis_dir, 'frame%04d-obj%02d.jpg' % (frame_num,i)), detection_crop)
 
                         for f, channel in enumerate(roi_feature):
-                            cv2.imwrite(os.path.join(vis_dir, 'obj%02d-channel%03d.jpg' % (i,f)), channel)
+                            channel += 10
+                            channel /= 20
+                            channel *= 255
+                            vis_img = cv2.resize(channel, (256,256), interpolation=cv2.INTER_CUBIC)
+                            cv2.imwrite(os.path.join(vis_dir, 'frame%04d-obj%02d-channel%03d.jpg' % (frame_num,i,f)), vis_img)
 
 
                 # YXYX to YXHW
