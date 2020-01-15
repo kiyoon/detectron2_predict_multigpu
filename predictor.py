@@ -14,9 +14,10 @@ from detectron2.engine.defaults import DefaultPredictor
 from detectron2.utils.video_visualizer import VideoVisualizer
 from detectron2.utils.visualizer import ColorMode, Visualizer
 
+from feature_predictor import FeaturePredictor
 
 class VisualizationDemo(object):
-    def __init__(self, cfg, instance_mode=ColorMode.IMAGE, parallel=False):
+    def __init__(self, cfg, instance_mode=ColorMode.IMAGE, parallel=False, visualise=True):
         """
         Args:
             cfg (CfgNode):
@@ -35,7 +36,9 @@ class VisualizationDemo(object):
             num_gpu = torch.cuda.device_count()
             self.predictor = AsyncPredictor(cfg, num_gpus=num_gpu)
         else:
-            self.predictor = DefaultPredictor(cfg)
+            self.predictor = FeaturePredictor(cfg)
+
+        self.visualise = visualise
 
     def run_on_image(self, image):
         """
@@ -47,24 +50,27 @@ class VisualizationDemo(object):
             predictions (dict): the output of the model.
             vis_output (VisImage): the visualized image output.
         """
-        vis_output = None
         predictions = self.predictor(image)
-        # Convert image from OpenCV BGR format to Matplotlib RGB format.
-        image = image[:, :, ::-1]
-        visualizer = Visualizer(image, self.metadata, instance_mode=self.instance_mode)
-        if "panoptic_seg" in predictions:
-            panoptic_seg, segments_info = predictions["panoptic_seg"]
-            vis_output = visualizer.draw_panoptic_seg_predictions(
-                panoptic_seg.to(self.cpu_device), segments_info
-            )
-        else:
-            if "sem_seg" in predictions:
-                vis_output = visualizer.draw_sem_seg(
-                    predictions["sem_seg"].argmax(dim=0).to(self.cpu_device)
+
+        if self.visualise:
+            # Convert image from OpenCV BGR format to Matplotlib RGB format.
+            image_rgb = image[:, :, ::-1]
+            visualizer = Visualizer(image_rgb, self.metadata, instance_mode=self.instance_mode)
+            if "panoptic_seg" in predictions:
+                panoptic_seg, segments_info = predictions["panoptic_seg"]
+                vis_output = visualizer.draw_panoptic_seg_predictions(
+                    panoptic_seg.to(self.cpu_device), segments_info
                 )
-            if "instances" in predictions:
-                instances = predictions["instances"].to(self.cpu_device)
-                vis_output = visualizer.draw_instance_predictions(predictions=instances)
+            else:
+                if "sem_seg" in predictions:
+                    vis_output = visualizer.draw_sem_seg(
+                        predictions["sem_seg"].argmax(dim=0).to(self.cpu_device)
+                    )
+                if "instances" in predictions:
+                    instances = predictions["instances"].to(self.cpu_device)
+                    vis_output = visualizer.draw_instance_predictions(predictions=instances)
+        else:
+            vis_output = None
 
         return predictions, vis_output
 
@@ -90,110 +96,31 @@ class VisualizationDemo(object):
         video_visualizer = VideoVisualizer(self.metadata, self.instance_mode)
 
         def process_predictions(frame, predictions):
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            if "panoptic_seg" in predictions:
-                panoptic_seg, segments_info = predictions["panoptic_seg"]
-                vis_frame = video_visualizer.draw_panoptic_seg_predictions(
-                    frame, panoptic_seg.to(self.cpu_device), segments_info
-                )
-            elif "instances" in predictions:
-                predictions = predictions["instances"].to(self.cpu_device)
-                vis_frame = video_visualizer.draw_instance_predictions(frame, predictions)
-            elif "sem_seg" in predictions:
-                vis_frame = video_visualizer.draw_sem_seg(
-                    frame, predictions["sem_seg"].argmax(dim=0).to(self.cpu_device)
-                )
+            kept_indices = predictions[1][0]
+            roi_pool_feature = predictions[2][kept_indices].to(self.cpu_device)
+            predictions = predictions[0][0]
 
-            # Converts Matplotlib RGB format to OpenCV BGR format
-            vis_frame = cv2.cvtColor(vis_frame.get_image(), cv2.COLOR_RGB2BGR)
-            return predictions, vis_frame
+            if self.visualise:
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                if "panoptic_seg" in predictions:
+                    panoptic_seg, segments_info = predictions["panoptic_seg"]
+                    vis_frame = video_visualizer.draw_panoptic_seg_predictions(
+                        frame_rgb, panoptic_seg.to(self.cpu_device), segments_info
+                    )
+                elif "instances" in predictions:
+                    predictions = predictions["instances"].to(self.cpu_device)
+                    vis_frame = video_visualizer.draw_instance_predictions(frame_rgb, predictions)
+                elif "sem_seg" in predictions:
+                    vis_frame = video_visualizer.draw_sem_seg(
+                        frame_rgb, predictions["sem_seg"].argmax(dim=0).to(self.cpu_device)
+                    )
 
-        frame_gen = self._frame_from_video(video)
-        if self.parallel:
-            buffer_size = self.predictor.default_buffer_size
-
-            frame_data = deque()
-
-            for cnt, frame in enumerate(frame_gen):
-                frame_data.append(frame)
-                self.predictor.put(frame)
-
-                if cnt >= buffer_size:
-                    frame = frame_data.popleft()
-                    predictions = self.predictor.get()
-                    yield process_predictions(frame, predictions)
-
-            while len(frame_data):
-                frame = frame_data.popleft()
-                predictions = self.predictor.get()
-                yield process_predictions(frame, predictions)
-        else:
-            for frame in frame_gen:
-                yield process_predictions(frame, self.predictor(frame))
-
-
-
-class PredictionDemo(object):
-    """ No visualisation
-    """
-    def __init__(self, cfg, instance_mode=ColorMode.IMAGE, parallel=False):
-        """
-        Args:
-            cfg (CfgNode):
-            instance_mode (ColorMode):
-            parallel (bool): whether to run the model in different processes from visualization.
-                Useful since the visualization logic can be slow.
-        """
-        self.metadata = MetadataCatalog.get(
-            cfg.DATASETS.TEST[0] if len(cfg.DATASETS.TEST) else "__unused"
-        )
-        self.cpu_device = torch.device("cpu")
-        self.instance_mode = instance_mode
-
-        self.parallel = parallel
-        if parallel:
-            num_gpu = torch.cuda.device_count()
-            self.predictor = AsyncPredictor(cfg, num_gpus=num_gpu)
-        else:
-            self.predictor = DefaultPredictor(cfg)
-
-    def run_on_image(self, image):
-        """
-        Args:
-            image (np.ndarray): an image of shape (H, W, C) (in BGR order).
-                This is the format used by OpenCV.
-
-        Returns:
-            predictions (dict): the output of the model.
-            vis_output (VisImage): the visualized image output.
-        """
-        vis_output = None
-        predictions = self.predictor(image)
-
-        return predictions, None
-
-    def _frame_from_video(self, video):
-        while video.isOpened():
-            success, frame = video.read()
-            if success:
-                yield frame
+                # Converts Matplotlib RGB format to OpenCV BGR format
+                vis_frame = cv2.cvtColor(vis_frame.get_image(), cv2.COLOR_RGB2BGR)
             else:
-                break
+                vis_frame = None
 
-    def run_on_video(self, video):
-        """
-        Visualizes predictions on frames of the input video.
-
-        Args:
-            video (cv2.VideoCapture): a :class:`VideoCapture` object, whose source can be
-                either a webcam or a video file.
-
-        Yields:
-            ndarray: BGR visualizations of each video frame.
-        """
-
-        def process_predictions(frame, predictions):
-            return predictions, None
+            return predictions, roi_pool_feature, vis_frame, frame
 
         frame_gen = self._frame_from_video(video)
         if self.parallel:
@@ -217,7 +144,6 @@ class PredictionDemo(object):
         else:
             for frame in frame_gen:
                 yield process_predictions(frame, self.predictor(frame))
-
 
 
 class AsyncPredictor:

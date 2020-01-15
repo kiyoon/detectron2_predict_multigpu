@@ -205,12 +205,8 @@ if __name__ == '__main__':
 #        print(predictions[0])
 #        print(kept_indices[0].shape)
 #        print(roipool_feature[kept_indices[0]].shape)
-        
 
-        if args.visualise_bbox:
-            demo = VisualizationDemo(cfg)
-        else:
-            demo = PredictionDemo(cfg)
+        demo = VisualizationDemo(cfg, visualise = args.visualise_bbox)
 
         mp4s = sorted(glob.glob(os.path.join(args.videos_input_dir, "*.mp4")))
         for mp4 in tqdm.tqdm(mp4s):
@@ -241,7 +237,7 @@ if __name__ == '__main__':
                     isColor=True,
                 )
 
-            for frame_num, (predictions, vis_frame) in enumerate(demo.run_on_video(video), 1):
+            for frame_num, (predictions, roi_pool_feature, vis_frame, frame) in enumerate(demo.run_on_video(video), 1):
                 #print(predictions.pred_classes)
                 #print(predictions.pred_boxes)
                 #print(predictions.scores)
@@ -258,7 +254,7 @@ if __name__ == '__main__':
                 detection_boxes[:, 2] -= detection_boxes[:, 0]
                 detection_boxes[:, 3] -= detection_boxes[:, 1]
 
-                output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy()}
+                output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy(), 'roi_pool_feature': roi_pool_feature.numpy()}
                 all_detection_outputs[frame_num] = output_dict
 
             video.release()
