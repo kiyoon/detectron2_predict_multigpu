@@ -132,6 +132,94 @@ class VisualizationDemo(object):
                 yield process_predictions(frame, self.predictor(frame))
 
 
+
+class PredictionDemo(object):
+    """ No visualisation
+    """
+    def __init__(self, cfg, instance_mode=ColorMode.IMAGE, parallel=False):
+        """
+        Args:
+            cfg (CfgNode):
+            instance_mode (ColorMode):
+            parallel (bool): whether to run the model in different processes from visualization.
+                Useful since the visualization logic can be slow.
+        """
+        self.metadata = MetadataCatalog.get(
+            cfg.DATASETS.TEST[0] if len(cfg.DATASETS.TEST) else "__unused"
+        )
+        self.cpu_device = torch.device("cpu")
+        self.instance_mode = instance_mode
+
+        self.parallel = parallel
+        if parallel:
+            num_gpu = torch.cuda.device_count()
+            self.predictor = AsyncPredictor(cfg, num_gpus=num_gpu)
+        else:
+            self.predictor = DefaultPredictor(cfg)
+
+    def run_on_image(self, image):
+        """
+        Args:
+            image (np.ndarray): an image of shape (H, W, C) (in BGR order).
+                This is the format used by OpenCV.
+
+        Returns:
+            predictions (dict): the output of the model.
+            vis_output (VisImage): the visualized image output.
+        """
+        vis_output = None
+        predictions = self.predictor(image)
+
+        return predictions, None
+
+    def _frame_from_video(self, video):
+        while video.isOpened():
+            success, frame = video.read()
+            if success:
+                yield frame
+            else:
+                break
+
+    def run_on_video(self, video):
+        """
+        Visualizes predictions on frames of the input video.
+
+        Args:
+            video (cv2.VideoCapture): a :class:`VideoCapture` object, whose source can be
+                either a webcam or a video file.
+
+        Yields:
+            ndarray: BGR visualizations of each video frame.
+        """
+
+        def process_predictions(frame, predictions):
+            return predictions, None
+
+        frame_gen = self._frame_from_video(video)
+        if self.parallel:
+            buffer_size = self.predictor.default_buffer_size
+
+            frame_data = deque()
+
+            for cnt, frame in enumerate(frame_gen):
+                frame_data.append(frame)
+                self.predictor.put(frame)
+
+                if cnt >= buffer_size:
+                    frame = frame_data.popleft()
+                    predictions = self.predictor.get()
+                    yield process_predictions(frame, predictions)
+
+            while len(frame_data):
+                frame = frame_data.popleft()
+                predictions = self.predictor.get()
+                yield process_predictions(frame, predictions)
+        else:
+            for frame in frame_gen:
+                yield process_predictions(frame, self.predictor(frame))
+
+
+
 class AsyncPredictor:
     """
     A predictor that runs the model asynchronously, possibly on >1 GPUs.

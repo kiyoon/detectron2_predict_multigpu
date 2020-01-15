@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 def get_parser():
-    parser = argparse.ArgumentParser(description="Detectron2 demo for builtin models",
+    parser = argparse.ArgumentParser(description="Extract bounding boxes using Detectron2",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "--config-file",
@@ -10,7 +10,7 @@ def get_parser():
         help="path to config file",
     )
     parser.add_argument("--video-input", help="Path to video file.")
-    parser.add_argument("--videos-input-dir", help="A directory of input videos.")
+    parser.add_argument("--videos-input-dir", help="A directory of input videos. It also extracts ROI pooled features from the Faster R-CNN object detector.")
     parser.add_argument("--images-input-dir", type=str, help="A directory of input images with extension *.jpg. The file names should be the frame number (e.g. 00000000001.jpg)")
     parser.add_argument("--model-weights", type=str, default="detectron2://COCO-Detection/faster_rcnn_R_101_FPN_3x/137851257/model_final_f6e8b1.pkl", help="Detectron2 object detection model.")
     parser.add_argument(
@@ -18,6 +18,8 @@ def get_parser():
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
+    parser.add_argument("--visualise-bbox", action='store_true', help="Save bounding box visualisation.")
+    parser.add_argument("--visualise-feature", action='store_true', help="Save ROI pooled feature visualisation.")
 
     parser.add_argument(
         "--confidence-threshold",
@@ -62,20 +64,12 @@ from detectron2.config import get_cfg
 from detectron2.utils.visualizer import Visualizer
 from detectron2.data import MetadataCatalog
 
-from predictor import VisualizationDemo
+from predictor import VisualizationDemo, PredictionDemo
 from detectron2.utils.video_visualizer import VideoVisualizer
 
 
-# Test
+# For extracting NMS kept indices
 
-
-
-
-import sys
-
-
-
-from feature_predictor import FeaturePredictor
 import custom_roi_head
 import custom_rcnn
 
@@ -205,18 +199,19 @@ if __name__ == '__main__':
         cfg.MODEL.ROI_HEADS.NAME = "StandardROIHeadsCustom"
         cfg.MODEL.META_ARCHITECTURE = "GeneralizedRCNNCustom"
 
-        predictor = TestPredictor(cfg)
-        im = cv2.imread('input.jpg')
-        predictions, kept_indices, roipool_feature = predictor(im)
-        print(predictions[0])
-        print(kept_indices[0].shape)
-        print(roipool_feature[kept_indices[0]].shape)
+#        predictor = TestPredictor(cfg)
+#        im = cv2.imread('input.jpg')
+#        predictions, kept_indices, roipool_feature = predictor(im)
+#        print(predictions[0])
+#        print(kept_indices[0].shape)
+#        print(roipool_feature[kept_indices[0]].shape)
         
-        sys.exit()
 
+        if args.visualise_bbox:
+            demo = VisualizationDemo(cfg)
+        else:
+            demo = PredictionDemo(cfg)
 
-
-        demo = VisualizationDemo(cfg)
         mp4s = sorted(glob.glob(os.path.join(args.videos_input_dir, "*.mp4")))
         for mp4 in tqdm.tqdm(mp4s):
             all_detection_outputs = {}
@@ -231,29 +226,44 @@ if __name__ == '__main__':
             os.makedirs(args.output, exist_ok=True)
             output_fname = os.path.join(args.output, basename)
             predictions_save_path = os.path.splitext(output_fname)[0] + ".pkl"
-            assert not os.path.isfile(output_fname), output_fname
-            output_file = cv2.VideoWriter(
-                filename=output_fname,
-                # some installation of opencv may not support x264 (due to its license),
-                # you can try other format (e.g. MPEG)
-                #fourcc=cv2.VideoWriter_fourcc(*"x264"),
-                fourcc=cv2.VideoWriter_fourcc(*"avc1"),
-                fps=float(frames_per_second),
-                frameSize=(width, height),
-                isColor=True,
-            )
+            assert not os.path.isfile(predictions_save_path), predictions_save_path
+
+            if args.visualise_bbox:
+                assert not os.path.isfile(output_fname), output_fname
+                output_file = cv2.VideoWriter(
+                    filename=output_fname,
+                    # some installation of opencv may not support x264 (due to its license),
+                    # you can try other format (e.g. MPEG)
+                    #fourcc=cv2.VideoWriter_fourcc(*"x264"),
+                    fourcc=cv2.VideoWriter_fourcc(*"avc1"),
+                    fps=float(frames_per_second),
+                    frameSize=(width, height),
+                    isColor=True,
+                )
+
             for frame_num, (predictions, vis_frame) in enumerate(demo.run_on_video(video), 1):
                 #print(predictions.pred_classes)
                 #print(predictions.pred_boxes)
                 #print(predictions.scores)
                 # predictions visualisation
-                output_file.write(vis_frame)
+                if args.visualise_bbox:
+                    output_file.write(vis_frame)
 
                 # predictions pickle
-                output_dict = {'num_detections': len(predictions), 'detection_boxes': predictions.pred_boxes.tensor.numpy(), 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy()}
+                detection_boxes = predictions.pred_boxes.tensor.numpy()
+                # XYXY to YXYX
+                detection_boxes[:, [0,1]] = detection_boxes[:, [1,0]]
+                detection_boxes[:, [2,3]] = detection_boxes[:, [3,2]]
+                # YXYX to YXHW
+                detection_boxes[:, 2] -= detection_boxes[:, 0]
+                detection_boxes[:, 3] -= detection_boxes[:, 1]
+
+                output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy()}
                 all_detection_outputs[frame_num] = output_dict
+
             video.release()
-            output_file.release()
+            if args.visualise_bbox:
+                output_file.release()
 
             with open(predictions_save_path, 'wb') as handle:
                 pickle.dump(all_detection_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
