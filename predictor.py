@@ -14,6 +14,7 @@ from detectron2.engine.defaults import DefaultPredictor
 from detectron2.utils.video_visualizer import VideoVisualizer
 from detectron2.utils.visualizer import ColorMode, Visualizer
 
+from feature_predictor import FeaturePredictor
 
 class VisualizationDemo(object):
     def __init__(self, cfg, instance_mode=ColorMode.IMAGE, parallel=False):
@@ -35,7 +36,7 @@ class VisualizationDemo(object):
             num_gpu = torch.cuda.device_count()
             self.predictor = AsyncPredictor(cfg, num_gpus=num_gpu)
         else:
-            self.predictor = DefaultPredictor(cfg)
+            self.predictor = FeaturePredictor(cfg)
 
     def run_on_image(self, image):
         """
@@ -90,6 +91,10 @@ class VisualizationDemo(object):
         video_visualizer = VideoVisualizer(self.metadata, self.instance_mode)
 
         def process_predictions(frame, predictions):
+            kept_indices = predictions[1][0]
+            roi_pool_feature = predictions[2][kept_indices].to(self.cpu_device)
+            predictions = predictions[0][0]
+
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             if "panoptic_seg" in predictions:
                 panoptic_seg, segments_info = predictions["panoptic_seg"]
@@ -106,7 +111,7 @@ class VisualizationDemo(object):
 
             # Converts Matplotlib RGB format to OpenCV BGR format
             vis_frame = cv2.cvtColor(vis_frame.get_image(), cv2.COLOR_RGB2BGR)
-            return predictions, vis_frame
+            return predictions, roi_pool_feature, vis_frame
 
         frame_gen = self._frame_from_video(video)
         if self.parallel:

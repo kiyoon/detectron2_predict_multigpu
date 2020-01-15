@@ -66,16 +66,8 @@ from predictor import VisualizationDemo
 from detectron2.utils.video_visualizer import VideoVisualizer
 
 
-# Test
+# For extracting NMS kept indices
 
-
-
-
-import sys
-
-
-
-from feature_predictor import FeaturePredictor
 import custom_roi_head
 import custom_rcnn
 
@@ -205,16 +197,14 @@ if __name__ == '__main__':
         cfg.MODEL.ROI_HEADS.NAME = "StandardROIHeadsCustom"
         cfg.MODEL.META_ARCHITECTURE = "GeneralizedRCNNCustom"
 
-        predictor = TestPredictor(cfg)
-        im = cv2.imread('input.jpg')
-        predictions, kept_indices, roipool_feature = predictor(im)
-        print(predictions[0])
-        print(kept_indices[0].shape)
-        print(roipool_feature[kept_indices[0]].shape)
         
-        sys.exit()
-
-
+#        predictor = TestPredictor(cfg)
+#        im = cv2.imread('input.jpg')
+#        predictions, kept_indices, roipool_feature = predictor(im)
+#        print(predictions[0])
+#        print(kept_indices[0].shape)
+#        print(roipool_feature[kept_indices[0]].shape)
+        
 
         demo = VisualizationDemo(cfg)
         mp4s = sorted(glob.glob(os.path.join(args.videos_input_dir, "*.mp4")))
@@ -242,7 +232,7 @@ if __name__ == '__main__':
                 frameSize=(width, height),
                 isColor=True,
             )
-            for frame_num, (predictions, vis_frame) in enumerate(demo.run_on_video(video), 1):
+            for frame_num, (predictions, roi_pool_feature, vis_frame) in enumerate(demo.run_on_video(video), 1):
                 #print(predictions.pred_classes)
                 #print(predictions.pred_boxes)
                 #print(predictions.scores)
@@ -250,7 +240,7 @@ if __name__ == '__main__':
                 output_file.write(vis_frame)
 
                 # predictions pickle
-                output_dict = {'num_detections': len(predictions), 'detection_boxes': predictions.pred_boxes.tensor.numpy(), 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy()}
+                output_dict = {'num_detections': len(predictions), 'detection_boxes': predictions.pred_boxes.tensor.numpy(), 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy(), 'roi_pool_feature': roi_pool_feature.numpy()}
                 all_detection_outputs[frame_num] = output_dict
             video.release()
             output_file.release()
