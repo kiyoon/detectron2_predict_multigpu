@@ -65,10 +65,10 @@ class FeaturePredictor:
         roi_head_mod = list(self.model.children())[2]
 #        print("*******1")
 #        print(roi_head_mod)
-        roi_pooling_mod = list(roi_head_mod.children())[0]
+        feature = list(roi_head_mod.children())[1]
 #        print("*******2")
 #        print(roi_pooling_mod)
-        roi_pooling_mod.register_forward_hook(hook)
+        feature.register_forward_hook(hook)
 
         checkpointer = DetectionCheckpointer(self.model)
         checkpointer.load(cfg.MODEL.WEIGHTS)
