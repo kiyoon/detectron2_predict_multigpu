@@ -10,7 +10,7 @@ def get_parser():
         help="path to config file",
     )
     parser.add_argument("--video-input", help="Path to video file.")
-    parser.add_argument("--videos-input-dir", help="A directory of input videos. It also extracts ROI pooled features from the Faster R-CNN object detector.")
+    parser.add_argument("--videos-input-dir", help="A directory of input videos. It also extracts features from the Faster R-CNN object detector.")
     parser.add_argument("--images-input-dir", type=str, help="A directory of input images with extension *.jpg. The file names should be the frame number (e.g. 00000000001.jpg)")
     parser.add_argument("--model-weights", type=str, default="detectron2://COCO-Detection/faster_rcnn_R_101_FPN_3x/137851257/model_final_f6e8b1.pkl", help="Detectron2 object detection model.")
     parser.add_argument(
@@ -19,14 +19,14 @@ def get_parser():
         "If not given, will show output in an OpenCV window.",
     )
     parser.add_argument("--visualise-bbox", action='store_true', help="Save bounding box visualisation.")
-    parser.add_argument("--visualise-feature", action='store_true', help="Save ROI pooled feature visualisation (but only the first frame of a video).")
+#    parser.add_argument("--visualise-feature", action='store_true', help="Save ROI pooled feature visualisation (but only the first frame of a video).")
     parser.add_argument("--divide-job-count", type=int, default=1, help="If there are too many files to process, you may want to divide the job into many processes. This is the number of processes you want to split but the programme doesn't run multiprocess for you. It merely splits the file lists into the number and uses --divide-job-index to assign files to process. Only effective when --videos-input-dir is set.")
     parser.add_argument("--divide-job-index", type=int, default=0, help="If there are too many files to process, you may want to divide the job into many processes. This is the index of process.")
 
     parser.add_argument(
         "--confidence-threshold",
         type=float,
-        default=0.5,
+        default=0.1,
         help="Minimum score for instance predictions to be shown",
     )
     parser.add_argument(
@@ -249,7 +249,7 @@ if __name__ == '__main__':
                     isColor=True,
                 )
 
-            for frame_num, (predictions, roi_pool_feature, vis_frame, frame) in enumerate(demo.run_on_video(video), 1):
+            for frame_num, (predictions, features, vis_frame, frame) in enumerate(demo.run_on_video(video), 1):
                 #print(predictions.pred_classes)
                 #print(predictions.pred_boxes)
                 #print(predictions.scores)
@@ -263,29 +263,29 @@ if __name__ == '__main__':
                 detection_boxes[:, [0,1]] = detection_boxes[:, [1,0]]
                 detection_boxes[:, [2,3]] = detection_boxes[:, [3,2]]
 
-                # Visualise feature
-                if args.visualise_feature and frame_num == 1:
-                    vis_dir = os.path.splitext(output_fname)[0]
-                    os.makedirs(vis_dir, exist_ok=True)
-                    cv2.imwrite(os.path.join(vis_dir, 'frame%04d.jpg' % (frame_num)), frame)
-                    for i, (detection_box, roi_feature) in enumerate(zip(detection_boxes, roi_pool_feature.numpy())):
-                        detection_crop = frame[int(round(detection_box[0])):int(round(detection_box[2])), int(round(detection_box[1])):int(round(detection_box[3]))]
-                        detection_crop = cv2.resize(detection_crop, (256,256), interpolation=cv2.INTER_CUBIC)
-                        cv2.imwrite(os.path.join(vis_dir, 'frame%04d-obj%02d.jpg' % (frame_num,i)), detection_crop)
-
-                        for f, channel in enumerate(roi_feature):
-                            channel += 10
-                            channel /= 20
-                            channel *= 255
-                            vis_img = cv2.resize(channel, (256,256), interpolation=cv2.INTER_CUBIC)
-                            cv2.imwrite(os.path.join(vis_dir, 'frame%04d-obj%02d-channel%03d.jpg' % (frame_num,i,f)), vis_img)
+#                # Visualise feature
+#                if args.visualise_feature and frame_num == 1:
+#                    vis_dir = os.path.splitext(output_fname)[0]
+#                    os.makedirs(vis_dir, exist_ok=True)
+#                    cv2.imwrite(os.path.join(vis_dir, 'frame%04d.jpg' % (frame_num)), frame)
+#                    for i, (detection_box, feature) in enumerate(zip(detection_boxes, features.numpy())):
+#                        detection_crop = frame[int(round(detection_box[0])):int(round(detection_box[2])), int(round(detection_box[1])):int(round(detection_box[3]))]
+#                        detection_crop = cv2.resize(detection_crop, (256,256), interpolation=cv2.INTER_CUBIC)
+#                        cv2.imwrite(os.path.join(vis_dir, 'frame%04d-obj%02d.jpg' % (frame_num,i)), detection_crop)
+#
+#                        for f, channel in enumerate(feature):
+#                            channel += 10
+#                            channel /= 20
+#                            channel *= 255
+#                            vis_img = cv2.resize(channel, (256,256), interpolation=cv2.INTER_CUBIC)
+#                            cv2.imwrite(os.path.join(vis_dir, 'frame%04d-obj%02d-channel%03d.jpg' % (frame_num,i,f)), vis_img)
 
 
                 # YXYX to YXHW
                 detection_boxes[:, 2] -= detection_boxes[:, 0]
                 detection_boxes[:, 3] -= detection_boxes[:, 1]
 
-                output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy(), 'roi_pool_feature': roi_pool_feature.numpy()}
+                output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy(), 'feature': features.numpy()}
                 all_detection_outputs[frame_num] = output_dict
 
             video.release()

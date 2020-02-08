@@ -60,7 +60,7 @@ class FeaturePredictor:
         self.model.eval()
         self.metadata = MetadataCatalog.get(cfg.DATASETS.TEST[0])
 
-        # Extract ROI pooled features
+        # Extract features
 #        print(self.model)
         roi_head_mod = list(self.model.children())[2]
 #        print("*******1")
