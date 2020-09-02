@@ -122,7 +122,8 @@ class VisualizationDemo(object):
                 if "instances" in predictions:
                     predictions = predictions["instances"].to(self.cpu_device)
 
-            return predictions, roi_pool_feature, vis_frame, frame
+            kept_indices = kept_indices.to(self.cpu_device)
+            return predictions, roi_pool_feature, kept_indices, vis_frame, frame
 
         frame_gen = self._frame_from_video(video)
         if self.parallel:

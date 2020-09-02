@@ -33,7 +33,7 @@ class GeneralizedRCNNCustom(nn.Module):
         self.device = torch.device(cfg.MODEL.DEVICE)
         self.backbone = build_backbone(cfg)
         self.proposal_generator = build_proposal_generator(cfg, self.backbone.output_shape())
-        self.roi_heads = build_roi_heads(cfg, self.backbone.output_shape())
+        self.roi_heads = build_roi_heads(cfg, self.backbone.output_shape())    # for outdated Detectron2
         self.vis_period = cfg.VIS_PERIOD
         self.input_format = cfg.INPUT.FORMAT
 

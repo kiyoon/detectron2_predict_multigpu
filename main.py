@@ -5,7 +5,7 @@ def get_parser():
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "--config-file",
-        default="/home/appuser/detectron2_repo/configs/COCO-Detection/faster_rcnn_R_101_FPN_3x.yaml",
+        default="/home/kiyoon/bin/detectron2/configs/COCO-Detection/faster_rcnn_R_101_FPN_3x.yaml",
         metavar="FILE",
         help="path to config file",
     )
@@ -28,6 +28,12 @@ def get_parser():
         type=float,
         default=0.1,
         help="Minimum score for instance predictions to be shown",
+    )
+    parser.add_argument(
+        "--nms-threshold",
+        type=float,
+        default=0.5,
+        help="Non-maximum suppression threshold",
     )
     parser.add_argument(
         "--opts",
@@ -85,6 +91,7 @@ def setup_cfg(args):
     # Set score_threshold for builtin models
     cfg.MODEL.RETINANET.SCORE_THRESH_TEST = args.confidence_threshold
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = args.confidence_threshold
+    cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = args.nms_threshold
     cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = args.confidence_threshold
     cfg.MODEL.WEIGHTS = args.model_weights
 #    cfg.freeze()
@@ -249,7 +256,7 @@ if __name__ == '__main__':
                     isColor=True,
                 )
 
-            for frame_num, (predictions, features, vis_frame, frame) in enumerate(demo.run_on_video(video), 1):
+            for frame_num, (predictions, features, kept_indices, vis_frame, frame) in enumerate(demo.run_on_video(video), 1):
                 #print(predictions.pred_classes)
                 #print(predictions.pred_boxes)
                 #print(predictions.scores)
@@ -285,6 +292,11 @@ if __name__ == '__main__':
                 detection_boxes[:, 2] -= detection_boxes[:, 0]
                 detection_boxes[:, 3] -= detection_boxes[:, 1]
 
+                print(len(predictions))
+                print(len(detection_boxes))
+                print(len(kept_indices))
+                print()
+                
                 output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy(), 'feature': features.numpy()}
                 all_detection_outputs[frame_num] = output_dict
 
