@@ -5,14 +5,17 @@ def get_parser():
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "--config-file",
-        default="/home/kiyoon/bin/detectron2/configs/COCO-Detection/faster_rcnn_R_101_FPN_3x.yaml",
+        #default="/home/kiyoon/bin/detectron2/configs/COCO-Detection/faster_rcnn_R_101_FPN_3x.yaml",
+        default="/home/kiyoon/bin/detectron2/configs/COCO-Detection/faster_rcnn_X_101_32x8d_FPN_3x.yaml",
         metavar="FILE",
         help="path to config file",
     )
     parser.add_argument("--video-input", help="Path to video file.")
     parser.add_argument("--videos-input-dir", help="A directory of input videos. It also extracts features from the Faster R-CNN object detector.")
+    parser.add_argument("--frames-input-dir", help="A directory of directories of frames.")
     parser.add_argument("--images-input-dir", type=str, help="A directory of input images with extension *.jpg. The file names should be the frame number (e.g. 00000000001.jpg)")
-    parser.add_argument("--model-weights", type=str, default="detectron2://COCO-Detection/faster_rcnn_R_101_FPN_3x/137851257/model_final_f6e8b1.pkl", help="Detectron2 object detection model.")
+    #parser.add_argument("--model-weights", type=str, default="detectron2://COCO-Detection/faster_rcnn_R_101_FPN_3x/137851257/model_final_f6e8b1.pkl", help="Detectron2 object detection model.")
+    parser.add_argument("--model-weights", type=str, default="detectron2://COCO-Detection/faster_rcnn_X_101_32x8d_FPN_3x/139173657/model_final_68b088.pkl", help="Detectron2 object detection model.")
     parser.add_argument(
         "--output",
         help="A file or directory to save output visualizations. "
@@ -30,12 +33,6 @@ def get_parser():
         help="Minimum score for instance predictions to be shown",
     )
     parser.add_argument(
-        "--nms-threshold",
-        type=float,
-        default=0.5,
-        help="Non-maximum suppression threshold",
-    )
-    parser.add_argument(
         "--opts",
         help="Modify config options using the command-line 'KEY VALUE' pairs",
         default=[],
@@ -46,8 +43,8 @@ def get_parser():
 parser = get_parser()
 args = parser.parse_args()
 
-if bool(args.video_input) + bool(args.images_input_dir) + bool(args.videos_input_dir) != 1:
-    parser.error("--video-input, --video-input-dir and --images-input-dir can't come together and only one must be specified.")
+if bool(args.video_input) + bool(args.images_input_dir) + bool(args.videos_input_dir) + bool(args.frames_input_dir) != 1:
+    parser.error("--video-input, --video-input-dir, --frames-input-dir and --images-input-dir can't come together and only one must be specified.")
 
 # Some basic setup
 # Setup detectron2 logger
@@ -91,7 +88,7 @@ def setup_cfg(args):
     # Set score_threshold for builtin models
     cfg.MODEL.RETINANET.SCORE_THRESH_TEST = args.confidence_threshold
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = args.confidence_threshold
-    cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = args.nms_threshold
+    #cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = args.nms_threshold
     cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = args.confidence_threshold
     cfg.MODEL.WEIGHTS = args.model_weights
 #    cfg.freeze()
@@ -292,15 +289,123 @@ if __name__ == '__main__':
                 detection_boxes[:, 2] -= detection_boxes[:, 0]
                 detection_boxes[:, 3] -= detection_boxes[:, 1]
 
-                print(len(predictions))
-                print(len(detection_boxes))
-                print(len(kept_indices))
-                print()
                 
                 output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy(), 'feature': features.numpy()}
                 all_detection_outputs[frame_num] = output_dict
 
             video.release()
+            if args.visualise_bbox:
+                output_file.release()
+
+            with open(predictions_save_path, 'wb') as handle:
+                pickle.dump(all_detection_outputs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    elif args.frames_input_dir:
+        # Test
+
+        # Use customised model so that we also get NMS kept indices
+        cfg.MODEL.ROI_HEADS.NAME = "StandardROIHeadsCustom"
+        cfg.MODEL.META_ARCHITECTURE = "GeneralizedRCNNCustom"
+
+#        predictor = TestPredictor(cfg)
+#        im = cv2.imread('input.jpg')
+#        predictions, kept_indices, roipool_feature = predictor(im)
+#        print(predictions[0])
+#        print(kept_indices[0].shape)
+#        print(roipool_feature[kept_indices[0]].shape)
+
+        demo = VisualizationDemo(cfg, visualise = args.visualise_bbox, use_frames=True)
+
+        video_dirs = next(os.walk(args.frames_input_dir))[1]
+        if video_dirs[0].isnumeric():
+            video_dirs = sorted(video_dirs,key=float)
+        else:
+            video_dirs = sorted(video_dirs)
+        num_videos = len(video_dirs)
+        num_videos_per_process = round(num_videos / args.divide_job_count)
+
+        if args.divide_job_index == args.divide_job_count -1:       # last process
+            video_dirs = video_dirs[args.divide_job_index * num_videos_per_process:]     # to the end
+        else:
+            video_dirs = video_dirs[args.divide_job_index * num_videos_per_process:(args.divide_job_index+1) * num_videos_per_process]
+
+        print("Process from %s to %s" % (video_dirs[0], video_dirs[-1]))
+
+        for video_dir in tqdm.tqdm(video_dirs):
+            all_detection_outputs = {}
+
+            files = sorted(next(os.walk(os.path.join(args.frames_input_dir, video_dir)))[2])
+            assert len(files) > 0
+
+            first_frame = cv2.imread(os.path.join(args.frames_input_dir, video_dir, files[0]))
+            height, width, _ = first_frame.shape
+            frames_per_second = 24000/1001
+            num_frames = len(files)
+
+            video = [first_frame]
+            for img in files[1:]:
+                frame = cv2.imread(os.path.join(args.frames_input_dir, video_dir, img))
+                video.append(frame)
+
+            os.makedirs(args.output, exist_ok=True)
+            output_fname = os.path.join(args.output, video_dir) + ".mp4"
+            predictions_save_path = os.path.splitext(output_fname)[0] + ".pkl"
+            assert not os.path.isfile(predictions_save_path), predictions_save_path
+
+            if args.visualise_bbox:
+                assert not os.path.isfile(output_fname), output_fname
+                output_file = cv2.VideoWriter(
+                    filename=output_fname,
+                    # some installation of opencv may not support x264 (due to its license),
+                    # you can try other format (e.g. MPEG)
+                    #fourcc=cv2.VideoWriter_fourcc(*"x264"),
+                    fourcc=cv2.VideoWriter_fourcc(*"avc1"),
+                    fps=float(frames_per_second),
+                    frameSize=(width, height),
+                    isColor=True,
+                )
+
+            for frame_num, (predictions, features, kept_indices, vis_frame, frame) in enumerate(demo.run_on_video(video), 1):
+                #print(predictions.pred_classes)
+                #print(predictions.pred_boxes)
+                #print(predictions.scores)
+                # predictions visualisation
+                if args.visualise_bbox:
+                    output_file.write(vis_frame)
+
+                # predictions pickle
+                detection_boxes = predictions.pred_boxes.tensor.numpy()
+                # XYXY to YXYX
+                detection_boxes[:, [0,1]] = detection_boxes[:, [1,0]]
+                detection_boxes[:, [2,3]] = detection_boxes[:, [3,2]]
+
+#                # Visualise feature
+#                if args.visualise_feature and frame_num == 1:
+#                    vis_dir = os.path.splitext(output_fname)[0]
+#                    os.makedirs(vis_dir, exist_ok=True)
+#                    cv2.imwrite(os.path.join(vis_dir, 'frame%04d.jpg' % (frame_num)), frame)
+#                    for i, (detection_box, feature) in enumerate(zip(detection_boxes, features.numpy())):
+#                        detection_crop = frame[int(round(detection_box[0])):int(round(detection_box[2])), int(round(detection_box[1])):int(round(detection_box[3]))]
+#                        detection_crop = cv2.resize(detection_crop, (256,256), interpolation=cv2.INTER_CUBIC)
+#                        cv2.imwrite(os.path.join(vis_dir, 'frame%04d-obj%02d.jpg' % (frame_num,i)), detection_crop)
+#
+#                        for f, channel in enumerate(feature):
+#                            channel += 10
+#                            channel /= 20
+#                            channel *= 255
+#                            vis_img = cv2.resize(channel, (256,256), interpolation=cv2.INTER_CUBIC)
+#                            cv2.imwrite(os.path.join(vis_dir, 'frame%04d-obj%02d-channel%03d.jpg' % (frame_num,i,f)), vis_img)
+
+
+                # YXYX to YXHW
+                detection_boxes[:, 2] -= detection_boxes[:, 0]
+                detection_boxes[:, 3] -= detection_boxes[:, 1]
+
+                
+                #output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy(), 'feature': features.numpy()}
+                output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy()}
+                all_detection_outputs[frame_num] = output_dict
+
             if args.visualise_bbox:
                 output_file.release()
 

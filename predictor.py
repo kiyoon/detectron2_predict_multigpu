@@ -17,13 +17,14 @@ from detectron2.utils.visualizer import ColorMode, Visualizer
 from feature_predictor import FeaturePredictor
 
 class VisualizationDemo(object):
-    def __init__(self, cfg, instance_mode=ColorMode.IMAGE, parallel=False, visualise=True):
+    def __init__(self, cfg, instance_mode=ColorMode.IMAGE, parallel=False, visualise=True, use_frames=False):
         """
         Args:
             cfg (CfgNode):
             instance_mode (ColorMode):
             parallel (bool): whether to run the model in different processes from visualization.
                 Useful since the visualization logic can be slow.
+            use_frames (bool): use frames of images instead of OpenCV2 video.
         """
         self.metadata = MetadataCatalog.get(
             cfg.DATASETS.TEST[0] if len(cfg.DATASETS.TEST) else "__unused"
@@ -39,6 +40,8 @@ class VisualizationDemo(object):
             self.predictor = FeaturePredictor(cfg)
 
         self.visualise = visualise
+
+        self.use_frames = use_frames
 
     def run_on_image(self, image):
         """
@@ -81,6 +84,10 @@ class VisualizationDemo(object):
                 yield frame
             else:
                 break
+
+    def _frame_from_frames(self, frames):
+        for frame in frames:
+            yield frame
 
     def run_on_video(self, video):
         """
@@ -125,7 +132,7 @@ class VisualizationDemo(object):
             kept_indices = kept_indices.to(self.cpu_device)
             return predictions, roi_pool_feature, kept_indices, vis_frame, frame
 
-        frame_gen = self._frame_from_video(video)
+        frame_gen = self._frame_from_video(video) if not self.use_frames else self._frame_from_frames(video)
         if self.parallel:
             buffer_size = self.predictor.default_buffer_size
 
