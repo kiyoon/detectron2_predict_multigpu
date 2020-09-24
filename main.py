@@ -6,7 +6,8 @@ def get_parser():
     parser.add_argument(
         "--config-file",
         #default="/home/kiyoon/bin/detectron2/configs/COCO-Detection/faster_rcnn_R_101_FPN_3x.yaml",
-        default="/home/kiyoon/bin/detectron2/configs/COCO-Detection/faster_rcnn_X_101_32x8d_FPN_3x.yaml",
+        #default="/home/kiyoon/bin/detectron2/configs/COCO-Detection/faster_rcnn_X_101_32x8d_FPN_3x.yaml",
+        default="/home/s1884147/bin/detectron2_0.1/configs/COCO-Detection/faster_rcnn_X_101_32x8d_FPN_3x.yaml",
         metavar="FILE",
         help="path to config file",
     )
@@ -401,6 +402,8 @@ if __name__ == '__main__':
                 detection_boxes[:, 2] -= detection_boxes[:, 0]
                 detection_boxes[:, 3] -= detection_boxes[:, 1]
 
+                if args.confidence_threshold < 0:
+                    assert len(predictions) == 100
                 
                 #output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy(), 'feature': features.numpy()}
                 output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy()}
