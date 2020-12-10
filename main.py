@@ -351,7 +351,9 @@ if __name__ == '__main__':
             os.makedirs(args.output, exist_ok=True)
             output_fname = os.path.join(args.output, video_dir) + ".mp4"
             predictions_save_path = os.path.splitext(output_fname)[0] + ".pkl"
-            assert not os.path.isfile(predictions_save_path), predictions_save_path
+            #assert not os.path.isfile(predictions_save_path), predictions_save_path
+            if os.path.isfile(predictions_save_path):
+                continue
 
             if args.visualise_bbox:
                 assert not os.path.isfile(output_fname), output_fname
@@ -403,7 +405,9 @@ if __name__ == '__main__':
                 detection_boxes[:, 3] -= detection_boxes[:, 1]
 
                 if args.confidence_threshold < 0:
-                    assert len(predictions) == 100
+                    if len(predictions) != 100:
+                        print("Number of boxes is supposed to be 100, but got {:d}".format(len(predictions)))
+                    #assert len(predictions) == 100, "Number of boxes is supposed to be 100, but got {:d}".format(len(predictions))
                 
                 #output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy(), 'feature': features.numpy()}
                 output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy()}
