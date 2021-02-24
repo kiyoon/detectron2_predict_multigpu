@@ -236,6 +236,12 @@ if __name__ == '__main__':
             num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
             basename = os.path.basename(mp4)
 
+            all_detection_outputs['height'] = height
+            all_detection_outputs['width'] = width 
+            all_detection_outputs['num_frames'] = num_frames
+            all_detection_outputs['detections'] = {}
+
+
             os.makedirs(args.output, exist_ok=True)
             output_fname = os.path.join(args.output, basename)
             predictions_save_path = os.path.splitext(output_fname)[0] + ".pkl"
@@ -292,7 +298,7 @@ if __name__ == '__main__':
 
                 
                 output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy(), 'feature': features.numpy()}
-                all_detection_outputs[frame_num] = output_dict
+                all_detection_outputs['detectios'][frame_num] = output_dict
 
             video.release()
             if args.visualise_bbox:
@@ -343,9 +349,17 @@ if __name__ == '__main__':
             frames_per_second = 24000/1001
             num_frames = len(files)
 
+            all_detection_outputs['height'] = height
+            all_detection_outputs['width'] = width 
+            all_detection_outputs['num_frames'] = num_frames
+            all_detection_outputs['detections'] = {}
+
+
             video = [first_frame]
             for img in files[1:]:
                 frame = cv2.imread(os.path.join(args.frames_input_dir, video_dir, img))
+                frame_height, frame_width, _ = frame.shape
+                assert height == frame_height and width == frame_width
                 video.append(frame)
 
             os.makedirs(args.output, exist_ok=True)
@@ -411,7 +425,7 @@ if __name__ == '__main__':
                 
                 #output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy(), 'feature': features.numpy()}
                 output_dict = {'num_detections': len(predictions), 'detection_boxes': detection_boxes, 'detection_classes': predictions.pred_classes.numpy(), 'detection_score': predictions.scores.numpy()}
-                all_detection_outputs[frame_num] = output_dict
+                all_detection_outputs['detections'][frame_num] = output_dict
 
             if args.visualise_bbox:
                 output_file.release()
