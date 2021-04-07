@@ -1,3 +1,16 @@
+# Overview
+Prodict object detection on big dataset. It splits the job to multiple GPUs, but note that it does NOT use multiple GPUs to predict a single image.  
+For example, if you have 4 GPUs, you have to open 4 terminals and run like this.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python main.py --frames-input-dir "/path/to/input/frames" --output "/path/to/output" --divide-job-count 4 --divide-job-index 0
+CUDA_VISIBLE_DEVICES=1 python main.py --frames-input-dir "/path/to/input/frames" --output "/path/to/output" --divide-job-count 4 --divide-job-index 1
+CUDA_VISIBLE_DEVICES=2 python main.py --frames-input-dir "/path/to/input/frames" --output "/path/to/output" --divide-job-count 4 --divide-job-index 2
+CUDA_VISIBLE_DEVICES=3 python main.py --frames-input-dir "/path/to/input/frames" --output "/path/to/output" --divide-job-count 4 --divide-job-index 3
+```
+
+# Dependencies
+
 Detectron2 == 0.1
 torch == 1.3.1	(or 1.4.0?)
 torchvision == 0.4.2
