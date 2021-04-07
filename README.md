@@ -1,5 +1,5 @@
 # Overview
-Prodict object detection on big dataset. It splits the job to multiple GPUs, but note that it does NOT use multiple GPUs to predict a single image.  
+Prodict object detection on big video dataset. It splits the job to multiple GPUs, but note that it does NOT use multiple GPUs to predict a single image.  
 For example, if you have 4 GPUs, you have to open 4 terminals and run like this.
 
 ```bash
